@@ -6,7 +6,7 @@ from datetime import datetime
 
 Base = declarative_base()
 TABLE_LIST = ['Fund', 'Record', 'User', 'Wallet']
-ENGINE_PATH = 'sqlite:///data/dbs/wallet.db'
+ENGINE_PATH = 'sqlite:///data/dbs/{}.db'
 
 class Fund(Base):
     __tablename__ = 'fund'
@@ -34,25 +34,32 @@ class User(Base):
     __tablename__ = 'User'
     userid = Column(String(10),primary_key=True)
     name = Column(String(20), primary_key=False)
+    invest_limit = Column(Float, nullable=True)
+
 
 class Wallet(Base):
     __tablename__ = 'wallet'
     userid = Column(String(10),primary_key=True)
     my_units = Column(Float, nullable=False)
-    my_cost = Column(Float, nullable=False)
+    my_cost = Column(Float, nullable=True)
     my_fund = Column(String(10), primary_key=True)
+    fund_type = Column(String(10), primary_key=True)
+    my_benefit = Column(Float, nullable=True)
 
 class DB_operation(object):
-    def create_table(self, table_name='Wallet', db_path = ENGINE_PATH):
+    def create_table(self, table_name='Wallet', db_path = ENGINE_PATH.format('Wallet')):
         if table_name not in TABLE_LIST:
             return False, "schema not exists"
+        engine = create_engine(db_path,echo=True)
         engine = create_engine(db_path,echo=True)
         if not engine.dialect.has_table(engine, table_name):
             Base.metadata.bind = engine
             Base.metadata.create_all()
+        return True
     
-    # def add_data(self, table_name='Wallet', )
 
+
+# create_table()
 a = Wallet(userid='dacong', my_fund='110013')
 print(type(a).__name__)
 
@@ -60,7 +67,7 @@ print(type(a).__name__)
 
 
 # create_table()
-
+# engine = create_engine(ENGINE_PATH.format("Wallet"),echo=True)
 # DBSession = sessionmaker(bind=engine)
 
 # session = DBSession()
@@ -68,3 +75,4 @@ print(type(a).__name__)
 # session.add(instance=new_user)
 # session.commit()
 # session.close()
+
