@@ -3,9 +3,12 @@ from sqlalchemy import Column, String, create_engine, Float, DateTime, MetaData
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+import pandas as pd
+import numpy as np
+import os
 
 Base = declarative_base()
-TABLE_LIST = ['Fund', 'Record', 'User', 'Wallet']
+TABLE_LIST = ['Fund', 'Record', 'User', 'Asset']
 ENGINE_PATH = 'sqlite:///data/dbs/{}.db'
 
 class Fund(Base):
@@ -31,36 +34,59 @@ class Record(Base):
     sold = Column(String(10), nullable=True)
 
 class User(Base):
-    __tablename__ = 'User'
+    __tablename__ = 'user'
     userid = Column(String(10),primary_key=True)
-    name = Column(String(20), primary_key=False)
-    invest_limit = Column(Float, nullable=True)
+    username = Column(String(20), primary_key=False)
+    invest_limit = Column(Float, nullable=False)
+    cash_in_hand = Column(Float, nullable=False)
 
-
-class Wallet(Base):
-    __tablename__ = 'wallet'
+class Asset(Base):
+    __tablename__ = 'asset'
     userid = Column(String(10),primary_key=True)
     my_units = Column(Float, nullable=False)
-    my_cost = Column(Float, nullable=True)
+    my_cost = Column(Float, nullable=False)
     my_fund = Column(String(10), primary_key=True)
     fund_type = Column(String(10), primary_key=True)
     my_benefit = Column(Float, nullable=True)
 
 class DB_operation(object):
-    def create_table(self, table_name='Wallet', db_path = ENGINE_PATH.format('Wallet')):
-        if table_name not in TABLE_LIST:
-            return False, "schema not exists"
+    def create_table(self, db_path = ENGINE_PATH.format('MyFunds')):
         engine = create_engine(db_path,echo=True)
-        engine = create_engine(db_path,echo=True)
-        if not engine.dialect.has_table(engine, table_name):
+        is_created = True
+        for tablename in TABLE_LIST:
+            if engine.dialect.has_table(engine, tablename):
+                is_created = False
+        if not is_created:
             Base.metadata.bind = engine
             Base.metadata.create_all()
         return True
     
+    def fund_df_to_table(self, pkl_path = "", db_path = ""):
+        if not (os.path.exists(pkl_path) and os.path.exists(db_path)):
+            print("*ERROR*: the path of pkl or db not exists....")
+            return False
+
+    def record_df_to_table(self, pkl_path = "", db_path = ""):
+        pass
+
+    def asset_df_to_table(self, pkl_path = "", db_path = ""):
+        pass
+
+    def fund_update_one(self, ):
+        pass
+
+    def asset_update_one(self, ):    
+        pass
+
+    def user_update_one(self, ):
+        pass
+
+    def record_update_one(self, ):
+        pass
 
 
 # create_table()
-a = Wallet(userid='dacong', my_fund='110013')
+a = Asset(userid='dacong', my_fund='110013')
 print(type(a).__name__)
 
 
