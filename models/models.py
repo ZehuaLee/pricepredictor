@@ -50,6 +50,10 @@ class Asset(Base):
     my_benefit = Column(Float, nullable=True)
 
 class DB_operation(object):
+    def __init__(self, db_path = ENGINE_PATH.format('MyFunds')):
+        self.__engine__ = create_engine(db_path,echo=True)
+
+
     def create_table(self, db_path = ENGINE_PATH.format('MyFunds')):
         engine = create_engine(db_path,echo=True)
         is_created = True
@@ -61,15 +65,20 @@ class DB_operation(object):
             Base.metadata.create_all()
         return True
     
-    def fund_df_to_table(self, pkl_path = "", db_path = ""):
-        if not (os.path.exists(pkl_path) and os.path.exists(db_path)):
-            print("*ERROR*: the path of pkl or db not exists....")
-            return False
+    def fund_df_to_table(self, fund_df = None, db_path = ENGINE_PATH.format('MyFunds')):
+        # if not (os.path.exists(db_path) and fund_df):
+        #     print("*ERROR*: the fund_df is None or the path_db not exists....")
+        #     return False
+        engine = create_engine(db_path, echo=True)
+        fund_df.to_sql('Fund',con=engine, if_exists='append', index=False)
 
-    def record_df_to_table(self, pkl_path = "", db_path = ""):
+
+
+
+    def record_df_to_table(self, record_df, db_path = ""):
         pass
 
-    def asset_df_to_table(self, pkl_path = "", db_path = ""):
+    def asset_df_to_table(self, asset_df, db_path = ""):
         pass
 
     def fund_update_one(self, ):
@@ -86,9 +95,14 @@ class DB_operation(object):
 
 
 # create_table()
-a = Asset(userid='dacong', my_fund='110013')
-print(type(a).__name__)
+# a = Asset(userid='dacong', my_fund='110013')
+# print(type(a).__name__)
 
+
+a = DB_operation()
+a.create_table()
+data = pd.read_pickle("/home/ritakuka/Projects/pricepredictor/data/fund_data/001013.pkl")
+a.fund_df_to_table(fund_df=data)
 
 
 

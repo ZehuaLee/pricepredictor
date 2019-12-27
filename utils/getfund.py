@@ -133,7 +133,7 @@ class GetData(object):
         funds = parsed_data["fund_code"].count().index
         price = dict()
         for fund in funds:
-            price[fund] = parsed_data[parsed_data["fund_code"] == fund and parse_data["date"] == today]["price"].iloc[0]
+            price[fund] = parsed_data[parsed_data["fund_code"] == fund and parsed_data["date"] == today]["price"].iloc[0]
         return pd.Series(price)
     
     def load_fund(self, fund_code = "", duration=[], file_path=""):

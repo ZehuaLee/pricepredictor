@@ -6,17 +6,16 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 getf = getfund.GetData()
-
-parsed_data = getf.get_one_fund("110013")
-print(parsed_data)
-getf.update_fund(parsed_data)
+# parsed_data = getf.get_one_fund("110013",duration=[str(datetime.date.today()-datetime.timedelta(days=30*4)),str(datetime.date.today())])
+# print(parsed_data, parsed_data.dtypes)
+# getf.update_fund(parsed_data)
 # data = getf.get_funds(['110013','001986'],[str(datetime.date.today()-datetime.timedelta(days=365*10)),str(datetime.date.today())])
 # # data['date'] = pd.to_datetime(data['date'],format='%Y-%m-%d')
 # # filtered_data = data[data['date']<pd.to_datetime('2019-08-01',format='%Y-%m-%d')]
 # getf.update_funds(data)
-# data = getf.load_funds(['110013','001986'])
+data = getf.load_funds(['110013','001986'])
 
-# print(data.fund_code.value_counts())
+print(data, data.dtypes)
 
 # print( all_fund_code)
 
