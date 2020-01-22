@@ -1,24 +1,23 @@
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(__file__, "../../utils")))
-from utils import getfund
+sys.path.append(os.path.dirname(__file__))
+from utils.getfund import data_operator
+from utils.operatefund import Operator
+from utils.readconfig import config
+from models.models import db_operator
 import datetime
 import pandas as pd
 
 
 class Strategy(object):
-    def __init__(self, fund_codes=[], date=''):
-        self.fund_codes = fund_codes
-        self.date = date
-        self.getfd = getfund.Data_Operator
-        self.record_folder = os.path.join(os.path.split(os.path.split(__file__)[0])[0], "data/op_records")
+    def __init__(self, user):
+        self.user = user
         
     
-    def if_buy(self, fund_code, today_date, if_verify=True ):
-        today_date = datetime.datetime.strptime(today_date,'%Y-%m-%d').date()
+    def if_buy(self, fund_code, today_date = datetime.datetime(datetime.datetime.today().year, datetime.datetime.today().month,datetime.datetime.today().day), if_verify=True):
         start_date = (today_date - datetime.timedelta(days=365*3))
-        duration = [str(start_date),str(today_date)]
-        past_3y_data = self.getfd.load_fund(fund_code, duration=duration)
+        duration = [start_date,today_date]
+        past_3y_data = data_operator.load_fund(fund_code, duration=duration)
         past_3y_data['price'] = past_3y_data['price'].astype(float)
         past_2y_data = self.getfd.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365*2)), today_date])
         past_2y_data['price'] = past_2y_data['price'].astype(float)

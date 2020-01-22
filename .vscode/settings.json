@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/opt/anaconda3/envs/py36/bin/python",
+    "python.pythonPath": "/Users/lizehua/opt/anaconda3/envs/py36/bin/python",
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true
 }
