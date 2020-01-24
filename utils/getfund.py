@@ -9,6 +9,7 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.readconfig import config
 from models.models import db_operator 
+from multiprocessing import Process, Queue, Pool
 
 class Data_Operator(object):
     def __init__(self):
@@ -88,6 +89,34 @@ class Data_Operator(object):
         #     parsed_data[column] = parsed_data[column].astype(str)
         return parsed_data
     
+    def read_multiple(self, fund_code):
+        print("process to fetch for %s" % fund_code)
+        try:
+            fund = self.get_one_fund(fund_code)
+        except:
+            fund = None
+            print("Error found in "+ fund_code)
+            return fund
+        else:
+            return fund
+
+    def get_funds_parallel(self, fund_list):
+        p = Pool(config["ps_num"])
+        quedict = {}
+        for x in fund_list:
+            a = p.apply_async(func = self.read_multiple, args = (x,))
+            quedict[x] = a
+        p.close()
+        p.join()
+        fund_sum = None
+        for (x, y) in quedict.items():
+            if fund_sum is None:
+                fund_sum = y.get()
+            else:
+                if y.get() is not None:
+                    fund_sum = pd.concat([fund_sum, y.get()], ignore_index=True, sort=False)
+        return fund_sum
+
     def get_funds(self,funds_list=[],duration=[]):
         if not duration:
             duration = self.duration
