@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.readconfig import config
 from models.models import db_operator 
 from multiprocessing import Process, Queue, Pool
+from concurrent.futures import ThreadPoolExecutor
 
 class Data_Operator(object):
     def __init__(self):
@@ -89,18 +90,19 @@ class Data_Operator(object):
         #     parsed_data[column] = parsed_data[column].astype(str)
         return parsed_data
     
-    def read_multiple(self, fund_code):
+    def read_multiple(self, fund_code, duration=[],entry_per_page = 20):
         print("process to fetch for %s" % fund_code)
         try:
-            fund = self.get_one_fund(fund_code)
+            fund = self.get_one_fund(fund_code,duration,entry_per_page)
         except:
             fund = None
-            print("Error found in "+ fund_code)
+            print("Exception: Error found in "+ fund_code)
             return fund
         else:
+            print(fund_code+" is fetched")
             return fund
 
-    def get_funds_parallel(self, fund_list):
+    def get_funds_multi_process(self, fund_list):
         p = Pool(config["ps_num"])
         quedict = {}
         for x in fund_list:
@@ -108,6 +110,7 @@ class Data_Operator(object):
             quedict[x] = a
         p.close()
         p.join()
+        print("***** All funds is fetched *****")
         fund_sum = None
         for (x, y) in quedict.items():
             if fund_sum is None:
@@ -115,6 +118,23 @@ class Data_Operator(object):
             else:
                 if y.get() is not None:
                     fund_sum = pd.concat([fund_sum, y.get()], ignore_index=True, sort=False)
+        return fund_sum
+
+    def get_funds_multi_thread(self, fund_list):
+        quedict = {}
+        fund_sum = None
+        with ThreadPoolExecutor(config["threads"]) as executor:
+            for each in fund_list:
+                r1 = executor.submit(self.read_multiple, each)
+                quedict[each] = r1
+        for (x, y) in quedict.items():
+            if fund_sum is None:
+                fund_sum = y.result()
+            else:
+                if y.result() is not None:
+                    print(x, " is being merged to result.")
+                    # db_operator.fund_update(y.result())
+                    fund_sum = pd.concat([fund_sum, y.result()], ignore_index=True, sort = False)
         return fund_sum
 
     def get_funds(self,funds_list=[],duration=[]):
@@ -190,8 +210,8 @@ class Data_Operator(object):
         return new_data
 
 data_operator = Data_Operator()
-df = data_operator.load_fund("110013",[datetime.datetime(2019,12,10),datetime.datetime(2020,1,10)])
-print(type(df.price.iloc[2]), type(df.price.iloc[2]),type(df.date.iloc[0]),type(df.accumulate.iloc[2]))
+# df = data_operator.load_fund("110013",[datetime.datetime(2019,12,10),datetime.datetime(2020,1,10)])
+# print(type(df.price.iloc[2]), type(df.price.iloc[2]),type(df.date.iloc[0]),type(df.accumulate.iloc[2]))
 # df = data_operator.get_funds(["110013","000075"])
 # print(type(df.price.iloc[0]))
 

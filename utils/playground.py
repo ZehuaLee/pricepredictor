@@ -1,6 +1,7 @@
 import requests
 import json
 import os, sys
+import datetime
 sys.setrecursionlimit(100000)
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.getfund import data_operator
@@ -11,15 +12,26 @@ from utils.getfund import data_operator
 # from bs4 import BeautifulSoup
 import pandas as pd
 from multiprocessing import Process, Queue, Pool
+from models.models import db_operator
+from concurrent.futures import ThreadPoolExecutor
+# funds = ["110013", "000011","040001","020022"]
+# count = 0
 
-funds = ["110013", "000011","040001","020022"]
-count = 0
+funds = data_operator.get_funds_list()
+# all_fund = data_operator.get_funds_parallel(funds.ID.values)
+# print("*** spider finished ***")
+# db_operator.fund_df_to_table(fund_df=all_fund)
+
+# data_operator.get_funds_parallel()
+
 
 # b = data_operator.get_one_fund("110013")
 # print(b)
+
 class Trial(object):
     def __init__(self,):
         pass
+
     def read_multiple(self, fund_code):
         print("process to write for %s" % fund_code)
         try:
@@ -29,7 +41,26 @@ class Trial(object):
             print("Error found in "+ fund_code)
             return fund
         else:
+            print(fund_code + " is fetched")
             return fund
+
+    def multiple_thread(self, funds):
+        quedict = {}
+        fund_sum = None
+        with ThreadPoolExecutor(40) as executor:
+            for each in funds:
+                r1 = executor.submit(self.read_multiple, each)
+                quedict[each] = r1
+        for (x, y) in quedict.items():
+            if fund_sum is None:
+                fund_sum = y.result()
+            else:
+                if y.result() is not None:
+                    print(x, " is being written to db")
+                    # db_operator.fund_update(y.result())
+                    fund_sum = pd.concat([fund_sum, y.result()], ignore_index=True, sort = False)
+        return fund_sum
+
     def rewrite_get_funds(self, fund_list):
         p = Pool(10)
         quedict = {}
@@ -47,14 +78,16 @@ class Trial(object):
                     fund_sum = pd.concat([fund_sum, y.get()], ignore_index=True, sort = False)
         return fund_sum
 
-#         if all_funds is None:
-#             all_funds = y
-#         else:
-#             if y is not None:
-#                 all_funds = pd.concat([all_funds,y],ignore_index=True,sort=False)
-#     return all_funds
-a = Trial().rewrite_get_funds(funds)
-print("+++++", a)
+tt = Trial()
+all_funds = tt.multiple_thread(data_operator.get_funds_list().ID.values)
+print("all funds are updated @",datetime.datetime.now())
+db_operator.fund_df_to_table(all_funds)
+
+# if all_funds is None:
+#     all_funds = y
+# else:
+#     if y is not None:
+#         all_funds = pd.concat([all_funds,y],ignore_index=True,sort=False)
 
 # def rewrite_get_funds(fund_list):
 #     def read_multiple(fund_code):

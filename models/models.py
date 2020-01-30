@@ -103,7 +103,7 @@ class DB_operation(object):
         if not db_path:
             db_path = self.db_path
         engine = create_engine(db_path, echo=True)
-        fund_df.to_sql('Fund',con=engine, if_exists='append', index=False, dtype=self.dtypedict)
+        fund_df.to_sql('Fund',con=engine, if_exists='append',index=False, dtype=self.dtypedict, chunksize = 10000)
 
     def sql_query(self, sql):
         engine = create_engine(self.db_path)
@@ -117,7 +117,8 @@ class DB_operation(object):
         session=Session()
         for i in range(len(data_df)):
             r1 = session.query(Fund).filter(and_(Fund.fund_code==data_df["fund_code"].iloc[i],Fund.date==data_df["date"].iloc[i])).first()
-            if r1 == None:
+            # print(r1, type(r1))
+            if r1 is None:
                 fund = Fund(fund_code=data_df.fund_code.iloc[i],date=data_df.date.iloc[i],price=data_df.price.iloc[i],accumulate=data_df.accumulate.iloc[i],daily_rate=data_df.daily_rate.iloc[i],purchase_state=data_df.purchase_state.iloc[i],ransom_state=data_df.ransom_state.iloc[i],dividends=data_df.dividends.iloc[i])
                 session.add(fund)
             else:
@@ -222,8 +223,6 @@ class DB_operation(object):
             print("Error fund in deleting users by userid")
         else:
             session.commit()
-
-
 
 db_operator = DB_operation()
 

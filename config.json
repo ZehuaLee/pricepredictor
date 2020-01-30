@@ -8,7 +8,8 @@
     "strategy_params":[],
     "timedelta":8,
     "startdate":"today",
-    "ps_num":10,
+    "ps_num":8,
+    "threads":32,
     "single_fund_url":"http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={fund_code}&page={page_num}&sdate={start_date}&edate={end_date}&per={entries_per_page}",
     "all_funds_url":"http://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=1&lx=1&letter=&gsid=&text=&sort=zdf,desc&page=30,200&dt=1567696684255&atfc=&onlySale=0",
     "realtime_price_url":"http://fund.eastmoney.com/{}.html"

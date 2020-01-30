@@ -19,22 +19,22 @@ class Strategy(object):
         duration = [start_date,today_date]
         past_3y_data = data_operator.load_fund(fund_code, duration=duration)
         past_3y_data['price'] = past_3y_data['price'].astype(float)
-        past_2y_data = self.getfd.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365*2)), today_date])
+        past_2y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365*2)), today_date])
         past_2y_data['price'] = past_2y_data['price'].astype(float)
-        past_1y_data = self.getfd.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365)), today_date])
+        past_1y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365)), today_date])
         past_1y_data['price'] = past_1y_data['price'].astype(float)
         y3_lowest_30_p = past_3y_data.sort_values(by=["price"])[:len(past_3y_data)*3//10]
         y2_lowest_30_p = past_2y_data.sort_values(by=["price"])[:len(past_3y_data)*3//10]
         y1_lowest_30_p = past_1y_data.sort_values(by=["price"])[:len(past_1y_data)*3//10]
         today_price = float('inf')
         if if_verify == True:
-            today_price = self.getfd.load_fund(fund_code,[(today_date-datetime.timedelta(days=1)), (today_date+datetime.timedelta(days=1))])
+            today_price = data_operator.load_fund(fund_code,[(today_date-datetime.timedelta(days=1)), (today_date+datetime.timedelta(days=1))])
             today_price.price = today_price.price.astype(float)
             if len(today_price.index)==0:
                 return 0
             today_price = today_price.price.iloc[0]
         else:
-            today_price = self.getfd.get_realtime_price(fund_codes=[fund_code])
+            today_price = data_operator.get_realtime_price(fund_codes=[fund_code])
             if len(today_price) == 0:
                 return 0
             today_price = today_price[0]
