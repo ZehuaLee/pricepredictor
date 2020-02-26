@@ -110,7 +110,7 @@ class Data_Operator(object):
             quedict[x] = a
         p.close()
         p.join()
-        print("***** All funds is fetched *****")
+        print("***** All funds are fetched *****")
         fund_sum = None
         for (x, y) in quedict.items():
             if fund_sum is None:
@@ -153,20 +153,24 @@ class Data_Operator(object):
         fund_data[["price","accumulate", "daily_rate"]] = fund_data[["price","accumulate", "daily_rate"]].astype(float)
         return fund_data
 
-    def load_fund(self, fund_code = "", duration=[]):
+    def load_fund(self, fund_code = "", duration=[],orderby = "date", asc = "asc"):
         if len(duration) ==0:
             duration = self.duration 
-        df = db_operator.sql_query("""SELECT * from Fund where (fund_code = '{}' )and(date between '{}' and '{}') """.format(fund_code, str(duration[0]), str(duration[1]+datetime.timedelta(days = 1))))
+        df = db_operator.sql_query("""SELECT * from Fund where (fund_code = '{}' )and(date between '{}' and '{}') order by {} {}""".format(fund_code, duration[0], duration[1]+datetime.timedelta(days = 1),orderby,asc))
+        if not df.empty:
+            df.date = pd.to_datetime(df.date)
         return df
 
-    def load_funds(self, fund_codes=[], duration=[]):
+    def load_funds(self, fund_codes=[], duration=[], orderby = "date", asc = "asc"):
         fund_list = ""
         for code in fund_codes:
             fund_list += "'"+code+"',"
         fund_list = "("+fund_list[:-1]+")"
         if len(duration) == 0:
             duration = self.duration
-        df = db_operator.sql_query("""SELECT * from Fund where (fund_code in {}) and (date between '{}' and '{}')""".format(fund_list, duration[0], duration[1]))
+        df = db_operator.sql_query("""SELECT * from Fund where (fund_code in {}) and (date between '{}' and '{}') order by {} {}""".format(fund_list, duration[0], duration[1]+datetime.timedelta(days = 1),orderby, asc))
+        if not df.empty:
+            df.date = pd.to_datetime(df.date)
         return df
     
     def load_asset(self, userid):
@@ -175,6 +179,8 @@ class Data_Operator(object):
 
     def load_record(self, userid):
         df = db_operator.sql_query(sql = """SELECT * from Record where userid = '{}'""".format(userid))
+        if not df.empty:
+            df.date = pd.to_datetime(df.date)
         return df
 
     def update_fund(self, df_fund_data=None):
@@ -186,7 +192,6 @@ class Data_Operator(object):
     def get_funds_list(self, file_path=""):
         if not file_path:
             file_path = os.path.join(self.fund_folder,"fund_data/all_fund.csv")
-            print(file_path)
         all_funds_table = pd.read_csv(file_path,dtype={'Num':np.int32, 'ID':np.str,'Name':np.str},index_col=0)
         return all_funds_table    
 

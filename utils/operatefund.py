@@ -3,7 +3,8 @@ import numpy as np
 import datetime
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils import getfund, readconfig
+from utils import readconfig
+from utils.getfund import data_operator
 from models.models import db_operator
 import random
 
@@ -19,6 +20,10 @@ class User(object):
             self.my_cash = df_user.my_cash.iloc[0]
         else:
             self.my_cash = my_cash
+            self.write_to_db()
+        self.asset = db_operator.sql_query(sql = """SELECT * from Asset where userid='{}'""".format(self.userid))
+        self.record = db_operator.sql_query(sql = """SELECT * from Record where userid = '{}'""".format(self.userid))
+        self.record.date = pd.to_datetime(self.record.date)
     
     def write_to_db(self, df=None):
         if df == None:
@@ -37,19 +42,25 @@ class User(object):
 
     def search_user_id(self, username):
         df = db_operator.sql_query(sql="""SELECT * from User where username ='{}'""".format(username))
-        return df.userid
+        if df.empty:
+            return None
+        return df.userid.iloc[0]
 
     def delete_from_db(self):
         db_operator.delete_asset_by_user(self.userid)
         db_operator.delete_record_by_user(self.userid)
         db_operator.delete_user_by_id(self.userid)
 
+    def update_my_cash(self, newcash):
+        self.my_cash = newcash
+        self.write_to_db()
+
 class Operator(object):
     def __init__(self, user):
         self.user = user
-        self.asset = db_operator.sql_query(sql = """SELECT * from Asset where userid='{}'""".format(self.user.userid))
-        self.record = db_operator.sql_query(sql = """SELECT * from Record where userid = '{}'""".format(self.user.userid))
-        self.record.date = pd.to_datetime(self.record.date)
+        # self.asset = db_operator.sql_query(sql = """SELECT * from Asset where userid='{}'""".format(self.user.userid))
+        # self.record = db_operator.sql_query(sql = """SELECT * from Record where userid = '{}'""".format(self.user.userid))
+        # self.record.date = pd.to_datetime(self.record.date)
 
     # return a series, price = operator.get_latest_price("111000", date = today, if = True).price 
     # (if not None)
@@ -61,7 +72,7 @@ class Operator(object):
         df.date = pd.to_datetime(df.date)
         target = df[df.date == date]
         if len(target) >0:
-            return target.price.iloc[0]
+            return target.iloc[0]
         df = df.sort_values(by='date',ascending=True)
         for i in range(len(df)):
             if df.date.iloc[i] > date:
@@ -81,39 +92,36 @@ class Operator(object):
         fund_data = self.get_latest_fund(fund_code, date)
         fund_value = amount
         fund_units = amount
-        print("#### Asset before",self.asset, "####Record before",self.record)
         if fund_data is None:
             return False, "Error: No fund data of {} exists @{}".format(fund_code, str(date))
         if if_value :
             fund_units = fund_value/fund_data.price
         else:
             fund_value = fund_units * fund_data.price
+        if self.user.my_cash < fund_value:
+            return False, "Error, cash {} is not enough to purchase {}".format(self.user.my_cash, fund_value)
         # append a new record to self.record
         new_record = {"userid":self.user.userid,"fund_code":fund_code,"date":date,"price":fund_data.price,"accumulate":fund_data.accumulate,"units":fund_units,"buy_sell":"buy"}
         # new_record = pd.Series(new_record)
-        self.record = self.record.append(new_record, ignore_index=True)
-        print("$$$$ after",self.record,"$$$$ after",self.asset)
+        self.user.record = self.user.record.append(new_record, ignore_index=True)
         # modify asset
-        if len(self.asset[self.asset.my_fund == fund_code])>0:
-            self.asset.units.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]] += fund_units
-            self.asset.cost.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]] += fund_value
+        if len(self.user.asset[self.user.asset.my_fund == fund_code])>0:
+            self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] += fund_units
+            self.user.asset.my_cost.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] += fund_value
         else:
             new_asset = {"userid":self.user.userid,"my_fund":fund_code,"my_units":fund_units,"my_cost":fund_value}
             new_asset = pd.Series(new_asset)
-            print(new_asset)
-            self.asset = self.asset.append(new_asset, ignore_index=True)
-            print("#####",self.asset)
+            self.user.asset = self.user.asset.append(new_asset, ignore_index=True)
         # update self.my_cash by fund_value
-        
         self.user.my_cash -= fund_value
-        return True
+        return True,"The latest data is found."
 
     def sell_at_date(self, fund_code, date=datetime.datetime.today(),amount=0.0, if_value=True):
         date = datetime.datetime(date.year, date.month, date.day)
         fund_data = self.get_latest_fund(fund_code,date)
         fund_value = amount
         fund_units = amount
-        if fund_data == None:
+        if fund_data.empty:
             return False, "Error: No fund data of {} exists @{}".format(fund_code, str(date))
         if if_value :
             fund_units = fund_value/fund_data.price
@@ -122,36 +130,36 @@ class Operator(object):
         # append new record to self.record
         new_record = {"userid":self.user.userid,"fund_code":fund_code,"date":date,"price":fund_data.price,"accumulate":fund_data.accumulate,"units":fund_units,"buy_sell":"sell"}
         # modify asset
-        if len(self.asset[self.asset.my_fund == fund_code])==0:
+        if len(self.user.asset[self.user.asset.my_fund == fund_code])==0:
             # sell the fund not in asset --> false
             return False, "Error: The fund of {} is not found in {}'s asset. ".format(fund_code, self.user.username)
-        elif self.asset.units.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]] < fund_units:
+        elif self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] < fund_units:
             # the units left is not enough to sell --> false
             return False, "Error: The fund of {} in {}'s asset is less than the amount to be sold."
         else:
             # succeed, cost--, units--, my_cash++
-            self.asset.cost.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]] -= (self.asset.cost.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]]/self.asset.units.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]])*fund_units
-            self.asset.units.iloc[self.asset.loc[self.asset.my_fund == fund_code].index[0]] -= fund_units
-        self.record.append(new_record)
+            self.user.asset.my_cost.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] -= (self.user.asset.my_cost.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]]/self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]])*fund_units
+            self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] -= fund_units
+        self.user.record.append(new_record,ignore_index=True)
         self.user.my_cash += fund_value
         return True
 
     def get_asset_value(self, date, contains_cash = False, realtimeprice = False):
         date = datetime.datetime(year = date.year, month=date.month, day=date.day)
-        fund_list = self.asset.my_fund.values
+        fund_list = self.user.asset.my_fund.values
         total_value = self.user.my_cash if contains_cash == True else 0
         for fund_code in fund_list:
             fund_data = self.get_latest_fund(fund_code, date)
-            if fund_data == None:
+            if fund_data is None:
                 total_value +=0
             else:
-                total_value += fund_data.price * self.asset.units.iloc[self.asset[self.asset.my_fund == fund_code].index[0]]
+                total_value += fund_data.price * self.user.asset.my_units.iloc[self.user.asset[self.user.asset.my_fund == fund_code].index[0]]
         return total_value
     
     def save_operations(self):
         self.user.write_to_db()
-        db_operator.asset_update(self.asset)
-        db_operator.record_update(self.record)
+        db_operator.asset_update(self.user.asset)
+        db_operator.record_update(self.user.record)
 
     def start_work(self):
         print(str(datetime.date.today()) + "'s job started.")
@@ -160,6 +168,21 @@ class Operator(object):
         date = datetime.datetime(date.year, date.month, date.day)
         self.save_operations()
         print(str(date) + "'s job has been done, now off work.")
+
+    # def calculate_total_assets(self, date=datetime.datetime.today()):
+    #     date = datetime.datetime(date.year, date.month, date.day)
+    #     total_asset_value = self.user.my_cash
+    #     for i in range(len(self.asset)):
+    #         fund_price = self.get_latest_fund(fund_code=self.asset.my_fund.iloc[i],date=date)
+    #         if fund_price is None:
+    #             total_asset_value+=0
+    #         else:
+    #             total_asset_value += self.asset.my_units.iloc[i]*fund_price.price
+    #     return total_asset_value
+
+            
+
+
 
 # user = User()
 # operator = Operator(user)

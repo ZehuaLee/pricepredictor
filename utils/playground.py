@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.getfund import data_operator
 # from utils.readconfig import config
 # from models.models import db_operator
-# from utils.operatefund import *
+from utils.operatefund import *
 # import datetime
 # from bs4 import BeautifulSoup
 import pandas as pd
@@ -17,7 +17,26 @@ from concurrent.futures import ThreadPoolExecutor
 # funds = ["110013", "000011","040001","020022"]
 # count = 0
 
-funds = data_operator.get_funds_list()
+# fund_in_db = db_operator.sql_query(sql = "SELECT distinct fund_code from Fund").fund_code.values
+# ff = db_operator.sql_query("SELECT * from Fund where fund_code = '110013' Order by date DESC")
+# print(ff)
+# ff = db_operator.sql_query("SELECT * from Fund where fund_code = '110013' Order by date")
+# ff = data_operator.load_funds(fund_codes=["110013","110031"],duration=[datetime.datetime(2018,1,2),datetime.datetime(2018,2,1)],orderby="date", asc = "DESC")
+# ff = data_operator.load_fund(fund_code="110013", duration=[datetime.datetime(2018,1,1), datetime.datetime(2018,1,10)],orderby="price", asc="DESC")
+# print(ff.dtypes, ff)
+# print(fund_in_db)
+# print("111",datetime.datetime.now())
+# fund_data_3y = data_operator.load_funds(fund_codes=fund_in_db,duration=[datetime.datetime(2015,1,27), datetime.datetime(2018,1,25)])
+# print("112",datetime.datetime.now())
+# fund_data_2y = fund_data_3y[fund_data_3y.date>datetime.datetime(2015,1,27)+datetime.timedelta(days = 364)]
+# print("113",datetime.datetime.now())
+# print(len(fund_data_3y), len(fund_data_2y))
+# print(fund_data_2y, fund_data_3y)
+# db_operator.delete_user_by_id("test_000003_0000")
+# fund_list = data_operator.get_funds_list()
+# print(fund_list[fund_list.ID == "110013"].Name.iloc[0])
+# fund_list = fund_list[fund_list.ID.isin(fund_in_db)]
+# print(len(fund_list))
 # all_fund = data_operator.get_funds_parallel(funds.ID.values)
 # print("*** spider finished ***")
 # db_operator.fund_df_to_table(fund_df=all_fund)
@@ -78,10 +97,26 @@ class Trial(object):
                     fund_sum = pd.concat([fund_sum, y.get()], ignore_index=True, sort = False)
         return fund_sum
 
-tt = Trial()
-all_funds = tt.multiple_thread(data_operator.get_funds_list().ID.values)
-print("all funds are updated @",datetime.datetime.now())
-db_operator.fund_df_to_table(all_funds)
+# user = User(username="zehua", password="0000", my_cash=1000)
+# loaded_fund = data_operator.load_funds(fund_codes=["110031","110013"],duration=[datetime.datetime(2019,12,10), datetime.datetime(2019,12,17)])
+# loaded_assets = data_operator.load_asset(userid="zehua_0000")
+# loaded_records = data_operator.load_record(userid="zehua_0000")
+
+# print("fund types:",loaded_fund.dtypes)
+# print("assets types:",loaded_assets.dtypes)
+# print("records types:",loaded_records.dtypes)
+# print(loaded_fund[loaded_fund.fund_code =="110031"])
+
+# operator = Operator(user)
+# total_assets = operator.get_asset_value(date=datetime.datetime(2019,12,28),contains_cash=True,realtimeprice=False)
+# print("total_assets: ",total_assets)
+
+
+
+
+
+# loaded_data = data_operator.load_fund("110013")
+# print(loaded_data.dtypes)
 
 # if all_funds is None:
 #     all_funds = y
@@ -234,7 +269,3 @@ db_operator.fund_df_to_table(all_funds)
 #     else:
 #         print(fund_code+" is not the target.")
 ########################################
-
-
-
-

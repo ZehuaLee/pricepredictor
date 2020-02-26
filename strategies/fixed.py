@@ -1,8 +1,8 @@
 import os
 import sys
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils.getfund import data_operator
-from utils.operatefund import Operator
+from utils.operatefund import Operator, User
 from utils.readconfig import config
 from models.models import db_operator
 import datetime
@@ -13,23 +13,21 @@ class Strategy(object):
     def __init__(self, user):
         self.user = user
         
-    
-    def if_buy(self, fund_code, today_date = datetime.datetime(datetime.datetime.today().year, datetime.datetime.today().month,datetime.datetime.today().day), if_verify=True):
+    def if_buy(self, fund_code, today_date = datetime.datetime(datetime.datetime.today().year, datetime.datetime.today().month,datetime.datetime.today().day), if_verify=True, all_fund_data = None):
+        # 获取3年内基金数据价格最低Top30%的数据
         start_date = (today_date - datetime.timedelta(days=365*3))
-        duration = [start_date,today_date]
-        past_3y_data = data_operator.load_fund(fund_code, duration=duration)
-        past_3y_data['price'] = past_3y_data['price'].astype(float)
-        past_2y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365*2)), today_date])
-        past_2y_data['price'] = past_2y_data['price'].astype(float)
-        past_1y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365)), today_date])
-        past_1y_data['price'] = past_1y_data['price'].astype(float)
-        y3_lowest_30_p = past_3y_data.sort_values(by=["price"])[:len(past_3y_data)*3//10]
-        y2_lowest_30_p = past_2y_data.sort_values(by=["price"])[:len(past_3y_data)*3//10]
-        y1_lowest_30_p = past_1y_data.sort_values(by=["price"])[:len(past_1y_data)*3//10]
+        yesterday_date = today_date-datetime.timedelta(days=1)
+        duration_3y = [start_date,yesterday_date]
+        duration_2y = [start_date+datetime.timedelta(days=365), yesterday_date]
+        duration_1y = [start_date+datetime.timedelta(days=365*2),yesterday_date]
+        # past_3y_data = db_operator.sql_query(sql="SELECT * from Fund where fund_code = '110013' Order by date")
+        past_3y_data = data_operator.load_fund(fund_code, duration=duration_3y,orderby="price",asc="ASC")
+        past_2y_data = data_operator.load_fund(fund_code=fund_code,duration=duration_2y,orderby="price",asc="ASC")
+        past_1y_data = data_operator.load_fund(fund_code=fund_code, duration=duration_1y, orderby="price",asc="ASC")
+        # 获取今日价格，若是测试则使用历史数据，否则用当日实时数据
         today_price = float('inf')
         if if_verify == True:
-            today_price = data_operator.load_fund(fund_code,[(today_date-datetime.timedelta(days=1)), (today_date+datetime.timedelta(days=1))])
-            today_price.price = today_price.price.astype(float)
+            today_price = data_operator.load_fund(fund_code=fund_code,duration=[today_date, today_date])
             if len(today_price.index)==0:
                 return 0
             today_price = today_price.price.iloc[0]
@@ -38,119 +36,329 @@ class Strategy(object):
             if len(today_price) == 0:
                 return 0
             today_price = today_price[0]
+        # past_3y_data['price'] = past_3y_data['price'].astype(float)
+
+        # past_2y_data['price'] = past_2y_data['price'].astype(float)
+        # past_1y_data['price'] = past_1y_data['price'].astype(float)
+        y3_lowest_30_p = past_3y_data[:len(past_3y_data)*3//10]
+        y2_lowest_30_p = past_2y_data[:len(past_2y_data)*3//10]
+        y1_lowest_30_p = past_1y_data[:len(past_1y_data)*3//10]
+        # 计算当前价格在3年内最低30%的价格中的排名占比
         buy_prob = 0
-        if today_price < y3_lowest_30_p.price.iloc[-1]:
-            buy_prob = len(y3_lowest_30_p[y3_lowest_30_p.price>today_price])/len(y3_lowest_30_p)
-        elif today_price < y2_lowest_30_p.price.iloc[-1]:
-            buy_prob = (len(y2_lowest_30_p[y2_lowest_30_p.price>today_price])/len(y2_lowest_30_p))*0.66
-        elif today_price < y1_lowest_30_p.price.iloc[-1]:
-            buy_prob = (len(y1_lowest_30_p[y1_lowest_30_p.price>today_price])/len(y1_lowest_30_p))*0.33
+        if not y2_lowest_30_p.empty and today_price < y3_lowest_30_p.price.iloc[-1]:
+            buy_prob = (len(past_3y_data)/(365*3))*len(y3_lowest_30_p[y3_lowest_30_p.price>today_price])/len(y3_lowest_30_p)
+        elif not y2_lowest_30_p.empty and today_price < y2_lowest_30_p.price.iloc[-1]:
+            buy_prob = ((len(past_2y_data)/(365*2))*len(y2_lowest_30_p[y2_lowest_30_p.price>today_price])/len(y2_lowest_30_p))*0.66
+        elif not y1_lowest_30_p.empty and today_price < y1_lowest_30_p.price.iloc[-1]:
+            buy_prob = ((len(past_1y_data)/365)*len(y1_lowest_30_p[y1_lowest_30_p.price>today_price])/len(y1_lowest_30_p))*0.33
         else:
             buy_prob = 0
-        records = self.load_records()
-        if "cost" in records.keys():
-            if fund_code not in records['cost']:
-                avg_cost = 0
-            elif records['units'][fund_code] == 0:
-                avg_cost = 0
-            else:    
-                avg_cost = records["cost"][fund_code]/records["units"][fund_code]
+        # 读取用户资产和购买记录
+        assets = self.user.asset
+        records = self.user.record
+        # if not records.empty:
+        #     records.date = pd.to_datetime(records.date)
+        # 判断今日价格是否比15天内的购买价格都低，如果15天以内买入过，那么就仅在当前价格比15内买入价格更低时买入。
+        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code == fund_code) & (records.buy_sell == "buy")]
+        prob_plus = 0
+        if len(rec_in_days[rec_in_days.price<=today_price])>0:
+            prob_plus = 0
         else:
+            prob_plus = 1
+        target_fund = assets[assets.my_fund == fund_code]
+        avg_cost = 0
+        if target_fund.empty :
             avg_cost = 0
+        else:
+            avg_cost = target_fund.my_cost.iloc[0]/target_fund.my_units.iloc[0]
         if avg_cost == 0:
-            return buy_prob 
-        # print(type(today_price))
+            return buy_prob
         buy_prob = buy_prob+(avg_cost-today_price)/avg_cost
-        return buy_prob
-        
-        
-    def if_sell(self, fund_code, today_date, if_verify=True):
-        today_date = datetime.datetime.strptime(today_date,'%Y-%m-%d').date()
-        start_date = (today_date - datetime.timedelta(days=365*3))
-        duration = [str(start_date),str(today_date)]
-        past_3y_data = self.getfd.load_fund(fund_code, duration=duration)
-        past_3y_data.price = past_3y_data.price.astype(float)
-        # past_2y_data = self.getfd.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365*2)).date(), today_date])
-        # past_1y_data = self.getfd.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365)).date(), today_date])
-        y3_top_30_p = past_3y_data.sort_values(by=["price"],ascending=False)[:len(past_3y_data)*2//10]
-        records = self.load_records()
-        if 'cost' in records.keys() and 'units' in records.keys():
-            if fund_code in records["cost"].index and fund_code in records['units'].index:
-                if records["units"][fund_code] == 0:
-                    avg_cost = 0
-                else:
-                    avg_cost = records["cost"][fund_code]/records["units"][fund_code]
-            else:
-                avg_cost = 0
+        if prob_plus > 0:
+            return buy_prob
         else:
-            avg_cost = 0
+            return 0
+
+    def if_sell(self, fund_code, today_date, if_verify=True, all_data_fund = None):
+        # 获取3年内基金数据价格最高Top30%的数据
+        start_date = (today_date - datetime.timedelta(days=365*3))
+        duration = [start_date,today_date]
+        past_3y_data = all_data_fund
+        if past_3y_data is None:
+            past_3y_data = data_operator.load_fund(fund_code, duration=[start_date, today_date-datetime.timedelta(days=1)],orderby="price",asc="DESC")
+        # past_3y_data.price = past_3y_data.price.astype(float)
         today_price = 0
         if if_verify == True:
-            today_price = self.getfd.load_fund(fund_code,[(today_date-datetime.timedelta(days=1)), (today_date+datetime.timedelta(days=1))])
-            today_price.price = today_price.price.astype(float)
+            today_price = data_operator.load_fund(fund_code=fund_code,duration=[today_date, today_date])
             if len(today_price.index)==0:
                 return 0
             today_price = today_price.price.iloc[0]
         else:
-            today_price = self.getfd.get_realtime_price(fund_codes=[fund_code])
+            today_price = data_operator.get_realtime_price(fund_codes=[fund_code])
             if len(today_price) == 0:
                 return 0
             today_price = today_price[0]
+        y3_top_30_p = past_3y_data[:len(past_3y_data)*3//10]
+        # 获取用户的资产数据和购买记录
+        assets = self.user.asset
+        records = self.user.record
+        avg_cost = 0
+        if assets.empty:
+            return 0
+        target_fund = assets[assets.my_fund == fund_code]
+        if target_fund.empty:
+            return 0
+        else:
+            avg_cost = target_fund.my_cost.iloc[0]/target_fund.my_units.iloc[0]
+        # 如果5天以内卖出过，那么就仅在当前价格比15内卖出价格更高时卖出。
+        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code == fund_code) & (records.buy_sell == "sell")]
+        prob_plus = 0 
+        # 用来判断今日价格是否高于15日以内所有卖出记录的价格
+        if len(rec_in_days[rec_in_days.price>=today_price])>0:
+            prob_plus = 0
+        else:
+            prob_plus = 1
+        # 计算当前价格在3年内最高30%的价格中的排名占比        
         sell_prob = 0
         if avg_cost <=0:
-            return 0
-        # print("---", today_price, avg_cost)
-        # print(type(today_price),type(avg_cost))
-        if (today_price-avg_cost)/avg_cost > 0.1:
-            sell_prob = (today_price-avg_cost)/avg_cost
-            return 0.7
+            sell_prob = 0
+            return sell_prob
+        sell_prob = len(y3_top_30_p[y3_top_30_p.price < today_price])/len(y3_top_30_p)
+        # 判断是否高于成本50%以上，（保证收益50%以上才卖出）
+        if (today_price-avg_cost)/avg_cost >= 0.2:
+            sell_prob = (today_price-avg_cost)/avg_cost + sell_prob
+            if prob_plus >0:
+                return sell_prob
+            else:
+                return 0
         return 0
-            
-            
+
+    def if_buy_accelerated(self, fund_list, today_date, if_verify=True, all_data_fund = None):
+        dur = [today_date-datetime.timedelta(days=365*3), today_date]
+        fds_all_3y = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="asc")
+        today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        if len(today_price) ==0:
+            return []
+        fds_all_2y = fds_all_3y[fds_all_3y.date > today_date-datetime.timedelta(days=365*2)]
+        fds_all_1y = fds_all_2y[fds_all_2y.date > today_date-datetime.timedelta(days=365)]
+        # res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/len(x[:len(x)*3//10]) if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
+        res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/365 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
+        res_2y = fds_all_2y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/243 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.666
+        res_1y = fds_all_1y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/121 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.333
+        result_list = res_3y[res_3y>0.7]
+        result_list = result_list.append(res_2y[(res_2y>0.6) & (~(res_2y.index.isin(result_list.index)))])
+        result_list = result_list.append(res_1y[(res_1y>0.3) & (~(res_1y.index.isin(result_list.index)))])
+        assets = self.user.asset
+        records = self.user.record
+        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code.isin(fund_list)) & (records.buy_sell == "buy")].set_index("fund_code")
+        fund_not_buy = (rec_in_days[["price"]]-today_price[["price"]]).fillna(0).apply(lambda x: x[x<0])
+        fund_not_buy = fund_not_buy[~fund_not_buy.index.duplicated()].index
+        avg_cost = assets[["my_fund","my_units","my_cost"]].rename(columns={"my_fund":"fund_code"}).set_index("fund_code")
+        avg_cost["avg_cost"] = avg_cost["my_cost"]/avg_cost["my_units"]
+        avg_cost_prob = ((avg_cost["avg_cost"]-today_price["price"])/avg_cost["avg_cost"]).fillna(0)
+        avg_cost_prob = avg_cost_prob[avg_cost_prob!=0].to_frame(name="prob")
+        result_list = result_list.to_frame(name="prob")
+        result_list = result_list[~result_list.index.isin(fund_not_buy)]
+        # 以1元作标准，对结果作比例加成
+        # funds_on_sale = today_price[today_price.price]-1
+        for x in avg_cost_prob.index:
+            if x in result_list.index:
+                result_list.prob.loc[x] += avg_cost_prob.prob.loc[x]
+        return result_list[result_list.prob>0.85].fillna(0).sort_values("prob", ascending=False)[:10]
+
+    def if_sell_accelerated(self, fund_list, today_date, if_verify=True, all_data_fund = None):
+        dur = [today_date-datetime.timedelta(days=365*3), today_date]
+        assets = self.user.asset
+        records = self.user.record
+        if assets.empty:
+            return []
+        fds_all_3y = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="desc")
+        today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        if len(today_price) ==0:
+            return []
+        res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]>x.price])/len(x[:len(x)*3//10]) if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
+        result_list = res_3y[res_3y>0.7]
+        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code.isin(fund_list)) & (records.buy_sell == "sell")].set_index("fund_code")
+        fund_not_buy = (rec_in_days[["price"]]-today_price[["price"]]).fillna(0).apply(lambda x: x[x<0])
+        fund_not_buy = fund_not_buy[~fund_not_buy.index.duplicated()].index
+        avg_cost = assets[["my_fund","my_units","my_cost"]].rename(columns={"my_fund":"fund_code"}).set_index("fund_code")
+        avg_cost["avg_cost"] = avg_cost["my_cost"]/avg_cost["my_units"]
+        avg_cost_prob = ((today_price["price"]-avg_cost["avg_cost"])/avg_cost["avg_cost"]).fillna(0)
+        avg_cost_prob = avg_cost_prob[avg_cost_prob>0.1].to_frame(name="prob")
+        result_list = result_list.to_frame(name="prob")
+        result_list = result_list[(~result_list.index.isin(fund_not_buy)) & (result_list.index.isin(avg_cost_prob.index))]
+        for x in avg_cost_prob.index:
+            if x in result_list.index:
+                result_list.prob.loc[x] += avg_cost_prob.prob.loc[x]
+        return result_list[result_list.prob>0.7].fillna(0).sort_values("prob", ascending=False)[:10]
         
-    # def exec_strategy(self, fund_codes=[], date=''):
-    #     if not fund_codes:
-    #         self.fund_codes = fund_codes
-    #     if not date:
-    #         self.date = date
-    #     if not self.fund_codes:
-    #         return False
-    #     if not self.date:
-    #         date = str(datetime.date.today())
-    #     records = []
-    #     for fund in fund_codes:
-    #         record = self.single_stragety(fund, date)
-    #         records.append(record)
+
+    def if_sell_accelerated_2(self, fund_list, today_date, if_verify=True, all_data_fund = None):
+        dur = [today_date, today_date]
+        assets = self.user.asset
+        today_price = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="desc")
+        if today_price.empty:
+            return []
+        if assets.empty:
+            return []
+        avg_cost = assets[["my_fund","my_units","my_cost"]].rename(columns={"my_fund":"fund_code"}).set_index("fund_code")
+        avg_cost["avg_cost"] = avg_cost["my_cost"]/avg_cost["my_units"]
+        avg_cost_prob = ((today_price["price"]-avg_cost["avg_cost"])/avg_cost["avg_cost"]).fillna(0)
+        avg_cost_prob = avg_cost_prob[avg_cost_prob>0.115].to_frame(name="prob").sort_values("prob")
+        return avg_cost_prob[:10]
+
+    def load_records(self, user = None):
+        if user is None:
+            user = self.user
+        myRecords = user.record
+        return myRecords
     
-    def load_records(self, record_path = ""):
-        if not record_path:
-            record_path = self.record_folder
-        result = dict()
-        if os.path.exists(os.path.join(record_path, "units.pkl")):
-            result["units"] = pd.read_pickle(os.path.join(record_path, "units.pkl"))
-        if os.path.exists(os.path.join(record_path, "cost.pkl")):
-            result["cost"] = pd.read_pickle(os.path.join(record_path, "cost.pkl"))
-        if os.path.exists(os.path.join(record_path, "benefit.pkl")):
-            result["benefit"] = pd.read_pickle(os.path.join(record_path, "benefit.pkl"))
-        if os.path.exists(os.path.join(record_path, "records.pkl")):
-            result["records"] = pd.read_pickle(os.path.join(record_path, "records.pkl"))
-        return result
+    def load_assets(self, user = None):
+        if user is None:
+            user = self.user
+        myAssets = data_operator.load_asset(user.userid)
+        return myAssets
+
+
+
+# def if_sell(self, fund_code, today_date, if_verify=True, all_data_fund = None):
+#         # 获取3年内基金数据价格最高Top30%的数据
+#         start_date = (today_date - datetime.timedelta(days=365*3))
+#         duration = [start_date,today_date]
+#         past_3y_data = all_data_fund
+#         if past_3y_data is None:
+#             past_3y_data = data_operator.load_fund(fund_code, duration=duration)
+#         # past_3y_data.price = past_3y_data.price.astype(float)
+#         today_price = 0
+#         if if_verify == True:
+#             today_price = past_3y_data[past_3y_data.date == today_date]
+#             if len(today_price.index)==0:
+#                 return 0
+#             today_price = today_price.price.iloc[0]
+#         else:
+#             today_price = data_operator.get_realtime_price(fund_codes=[fund_code])
+#             if len(today_price) == 0:
+#                 return 0
+#             today_price = today_price[0]
+#         past_3y_data[past_3y_data.date>today_date].sort_values(by=["price"],ascending=False).reset_index(drop=True,inplace = True)
+#         y3_top_30_p = past_3y_data[:len(past_3y_data)*3//10]
+
+#         # 获取用户的资产数据和购买记录
+#         assets = self.user.asset
+#         records = self.user.record
+#         avg_cost = 0
+#         if assets.empty:
+#             # print("oper_asset:", assets)
+#             # print("oper_record:",records)
+#             return 0
+#         target_fund = assets[assets.my_fund == fund_code].reset_index(drop=True, inplace = True)
+#         if target_fund.empty:
+#             return 0
+#         else:
+#             avg_cost = target_fund.my_cost.iloc[0]/target_fund.my_units.iloc[0]
+#         # 获取当日基金价格，若是测试则使用历史数据，否则用当日实时数据
         
-            
-    # def single_stragety(self, fund_code, date, is_verify = True):
-    #     fixed_value = 100
-    #     get_data = GetData()
-    #     end_date = datetime.datetime.strptime(date,'%Y-%m-%d').date()
-    #     start_date = end_date-datetime.timedelta(weeks=150)
-    #     historic_data = get_data.get_one_fund(fund_code, duration = [str(start_date), str(end_date)])
-    #     real_data = None
-    #     if is_verify == True:
-    #         if date in historic_data.date.value_counts().index:
-                
-    #         real_data = historic_data.iloc[0]
-            
-        
-    #     return [fund_code, date, buy_sell, share]     
+#         # 如果5天以内卖出过，那么就仅在当前价格比15内卖出价格更高时卖出。
+#         rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code == fund_code) & (records.buy_sell == "sell")]
+#         prob_plus = 0 # 用来判断今日价格是否高于15日以内所有卖出记录的价格
+#         if len(rec_in_days[rec_in_days.price>=today_price])>0:
+#             prob_plus = 0
+#         else:
+#             prob_plus = 1
+#         # 计算当前价格在3年内最高30%的价格中的排名占比        
+#         sell_prob = 0
+#         if avg_cost <=0:
+#             sell_prob = 0
+#             return sell_prob
+#         sell_prob = len(y3_top_30_p[y3_top_30_p.price < today_price])/len(y3_top_30_p)
+#         # 判断是否高于成本50%以上，（保证收益50%以上才卖出）
+#         if (today_price-avg_cost)/avg_cost >= 0.5:
+#             sell_prob = (today_price-avg_cost)/avg_cost + sell_prob
+#             if prob_plus >0:
+#                 return sell_prob
+#             else:
+#                 return 0
+#         return 0
+    # def if_buy(self, fund_code, today_date = datetime.datetime(datetime.datetime.today().year, datetime.datetime.today().month,datetime.datetime.today().day), if_verify=True, all_fund_data = None):
+    #     # 获取3年内基金数据价格最低Top30%的数据
+    #     start_date = (today_date - datetime.timedelta(days=365*3))
+    #     duration = [start_date,today_date]
+    #     past_3y_data = all_fund_data
+    #     if past_3y_data is None:
+    #         past_3y_data = data_operator.load_fund(fund_code, duration=duration)
+    #     # 获取今日价格，若是测试则使用历史数据，否则用当日实时数据
+    #     today_price = float('inf')
+    #     if if_verify == True:
+    #         today_price = past_3y_data[past_3y_data.date == today_date]
+    #         if len(today_price.index)==0:
+    #             return 0
+    #         today_price = today_price.price.iloc[0]
+    #     else:
+    #         today_price = data_operator.get_realtime_price(fund_codes=[fund_code])
+    #         if len(today_price) == 0:
+    #             return 0
+    #         today_price = today_price[0]
+    #     # past_3y_data['price'] = past_3y_data['price'].astype(float)
+    #     past_3y_data = past_3y_data[past_3y_data.date<today_date].sort_values(by=["price"])
+    #     past_2y_data = past_3y_data[past_3y_data.date > (start_date+datetime.timedelta(days=364))]
+    #     past_1y_data = past_3y_data[past_3y_data.date > (start_date+datetime.timedelta(days=364*2+1))]
+    #     # past_2y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=364*2+1)), today_date])
+    #     # past_1y_data = data_operator.load_fund(fund_code, duration=[(today_date-datetime.timedelta(days=365)), today_date])
+    #     # past_2y_data['price'] = past_2y_data['price'].astype(float)
+    #     # past_1y_data['price'] = past_1y_data['price'].astype(float)
+    #     y3_lowest_30_p = past_3y_data[:len(past_3y_data)*3//10]
+    #     y2_lowest_30_p = past_2y_data[:len(past_3y_data)*3//10]
+    #     y1_lowest_30_p = past_1y_data[:len(past_1y_data)*3//10]
+    #     # 计算当前价格在3年内最低30%的价格中的排名占比
+    #     buy_prob = 0
+    #     if not y3_lowest_30_p.empty and today_price < y3_lowest_30_p.price.iloc[-1]:
+    #         buy_prob = len(y3_lowest_30_p[y3_lowest_30_p.price>today_price])/len(y3_lowest_30_p)
+    #     elif not y2_lowest_30_p.empty and today_price < y2_lowest_30_p.price.iloc[-1]:
+    #         buy_prob = (len(y2_lowest_30_p[y2_lowest_30_p.price>today_price])/len(y2_lowest_30_p))*0.66
+    #     elif not y1_lowest_30_p.empty and today_price < y1_lowest_30_p.price.iloc[-1]:
+    #         buy_prob = (len(y1_lowest_30_p[y1_lowest_30_p.price>today_price])/len(y1_lowest_30_p))*0.33
+    #     else:
+    #         buy_prob = 0
+    #     # 读取用户资产和购买记录
+    #     assets = self.user.asset
+    #     records = self.user.record
+    #     # if not records.empty:
+    #     #     records.date = pd.to_datetime(records.date)
+    #     # 判断今日价格是否比15天内的购买价格都低，如果15天以内买入过，那么就仅在当前价格比15内买入价格更低时买入。
+    #     rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code == fund_code) & (records.buy_sell == "buy")]
+    #     prob_plus = 0
+    #     if len(rec_in_days[rec_in_days.price<=today_price])>0:
+    #         prob_plus = 0
+    #     else:
+    #         prob_plus = 1
+    #     target_fund = assets[assets.my_fund == fund_code]
+    #     avg_cost = 0
+    #     if target_fund.empty :
+    #         avg_cost = 0
+    #     else:
+    #         avg_cost = target_fund.my_cost.iloc[0]/target_fund.my_units.iloc[0]
+    #     if avg_cost == 0:
+    #         return buy_prob
+    #     buy_prob = buy_prob+(avg_cost-today_price)/avg_cost
+    #     if prob_plus > 0:
+    #         return buy_prob
+    #     else:
+    #         return 0             
+
+
+
+# Test Case
+tester = Strategy(user=User(username="zehua",password = "0000", my_cash = 10000))
+# print(datetime.datetime.now())
+res = tester.if_buy(fund_code="001986",today_date=datetime.datetime(2019,1,2))
+# print(datetime.datetime.now(),"if buy:",res)
+# operator = Operator(user=User(username="zehua",password = "0000", my_cash = 10000))
+# operator.buy_at_date(fund_code="001986",date=datetime.datetime(2019,1,3),amount=100)
+# operator.save_operations()
+# res = tester.if_sell(fund_code="001986",today_date=datetime.datetime(2020,1,22))
+# print("if sell:",res)
+
+
 
 # test_strategy = strategy()
 # a = test_strategy.if_buy("110013",'2018-12-10')

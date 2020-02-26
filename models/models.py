@@ -6,13 +6,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
-import os,sys
+import os,sys,time
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from utils import readconfig
 
 Base = declarative_base()
 TABLE_LIST = ['Fund', 'Record', 'User', 'Asset']
-ENGINE_PATH = readconfig.config["db_engine"]
+ENGINE_PATH = readconfig.config["db_engine"]+"?check_same_thread=False"
 
 class Fund(Base):
     __tablename__ = 'Fund'
@@ -57,9 +57,9 @@ class User(Base):
 
 # Dataframe Asset:
 #         userid  -->userid
-#         fund_code  -->my_fund
-#         units  -->my_units
-#         cost  -->my_cost
+#         my_fund  -->my_fund
+#         my_units  -->my_units
+#         my_cost  -->my_cost
 class Asset(Base):
     __tablename__ = 'Asset'
     userid = Column(VARCHAR(),primary_key=True)
@@ -153,14 +153,23 @@ class DB_operation(object):
         Session = sessionmaker(bind=engine)
         session = Session()
         for i in range(len(user_df)):
-            r1 = session.query(User).filter(and_(User.userid==user_df.userid.iloc[i], User.password==user_df.password.iloc[0])).first()
-            if r1 == None:
+            r1 = session.query(User).filter(User.userid==user_df.userid.iloc[i]).first()
+            if not r1 :
                 user = User(userid=user_df.userid.iloc[i],password=user_df.password.iloc[i],username=user_df.username.iloc[i],my_cash=user_df.my_cash.iloc[i])
                 session.add(user)
             else:
+                r1.password = user_df.password.iloc[i]
                 r1.username=user_df.username.iloc[i]
                 r1.my_cash=user_df.my_cash.iloc[i]
-        session.commit()
+        flag = True
+        while flag:
+            try:
+                session.commit()
+                flag = False
+                print("commit succeed.")
+            except:
+                flag = True
+                time.sleep(0.1)
 
     # userid, fund_code, date
     def record_update(self, record_df):
@@ -170,7 +179,7 @@ class DB_operation(object):
         for i in range(len(record_df)):
             r1 = session.query(Record).filter(and_(Record.userid==record_df.userid.iloc[i], Record.fund_code==record_df.fund_code.iloc[i], Record.date==record_df.date.iloc[i])).first()
             if r1 == None:
-                record = Record(userid=record_df.userid.iloc[i], fund_code=record_df.fund_code.iloc[i], date=record_df.date.iloc[0], price=record_df.price.iloc[i], accumulate=record_df.accumulate.iloc[i], units=record_df.units.iloc[i], buy_sell = record_df.buy_sell.iloc[i])
+                record = Record(userid=record_df.userid.iloc[i], fund_code=record_df.fund_code.iloc[i], date=record_df.date.iloc[i], price=record_df.price.iloc[i], accumulate=record_df.accumulate.iloc[i], units=record_df.units.iloc[i], buy_sell = record_df.buy_sell.iloc[i])
                 session.add(record)
             else:
                 r1.price = record_df.price.iloc[i]
@@ -192,7 +201,15 @@ class DB_operation(object):
         except:
             print("Error fund in deleting assets by userid")
         else:    
-            session.commit()  
+            flag = True
+            while flag:
+                try:
+                    session.commit()
+                    flag = False
+                    print("commit succeed.")
+                except:
+                    flag = True
+                    time.sleep(0.5)
     
     def delete_record_by_user(self, userid = ""):
         engine = create_engine(self.db_path)
@@ -219,11 +236,24 @@ class DB_operation(object):
                 return True
             for user in users:
                 session.delete(user)
-        except:
+        except Exception:
             print("Error fund in deleting users by userid")
         else:
             session.commit()
-
+    def delete_users_by_ids(self, userids = []):
+        engine = create_engine(self.db_path)
+        Session=sessionmaker(bind=engine)
+        session=Session()
+        try:
+            users = session.query(User).filter(User.userid.in_(userids)).all()
+            if len(users)==0:
+                return True
+            for user in users:
+                session.delete(user)
+        except:
+            print("Error fund in deleting users by userids")
+        else:
+            session.commit()
 db_operator = DB_operation()
 
 
