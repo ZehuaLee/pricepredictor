@@ -3,6 +3,7 @@ sys.path.append(os.path.dirname(__file__))
 from utils.operatefund import Operator,User
 from utils.getfund import data_operator
 from utils.readconfig import config
+import datetime
 exec("from strategies.{} import Strategy".format(config["strategy_file"]))
 class Tester(object):
     def __init__(self, user = User(username="Tester", password="0000", my_cash=10000)):
@@ -18,4 +19,7 @@ class Tester(object):
         pass
         # return [gain, yearly_gain, yearly_gain_rate, cost]
 
-a = Tester()
+fds_list = data_operator.get_funds_list()
+a = data_operator.get_funds_multi_thread(fund_list=fds_list.ID.values, duration=[datetime.datetime(2019,12,10), datetime.datetime(2020,2,27)])
+data_operator.update_fund(df_fund_data=a)
+

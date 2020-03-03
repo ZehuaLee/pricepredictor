@@ -11,8 +11,33 @@ exec("from strategies.{} import Strategy".format(config["strategy_file"]))
 from concurrent.futures import ThreadPoolExecutor
 from strategies.fixed import Strategy
 class Runner(object):
-    def __init__(self):
-        pass
+    def __init__(self, user = User(username="Runner", password="1234", my_cash=5000)):
+        self.user = user
+        
+
+    def save_latest_price(self, today=datetime.datetime.today(), timedelta = 10):
+        today_date = datetime.datetime(today.year, today.month, today.day)
+        fund_list = data_operator.get_funds_list().ID.values
+        today_fund = data_operator.get_funds_multi_thread(fund_list=fund_list, duration=[today_date-datetime.timedelta(timedelta), today_date], entry_per_page=20)
+        data_operator.update_fund(today_fund)
+
+
+    def get_funds_to_buy(self, fund_list = data_operator.get_funds_list().ID.values):
+        # real_time_price = data_operator.get_realtime_price(fund_list)
+        today = datetime.datetime.today()
+        self.save_latest_price()
+        my_strategy = Strategy(user=self.user)
+        prob_to_buy = my_strategy.if_buy_accelerated(fund_list=fund_list, today_date=today, if_verify=False, all_data_fund=None)
+        # prob_to_sell = my_strategy.if_sell_accelerated_2(fund_list=self.user.asset.my_fund.values, today_date=today, if_verify=True, all_data_fund=None)
+        if len(prob_to_buy)>0:
+            for code in prob_to_buy.index:
+                print("buy: ", code, "prob: ", prob_to_buy[code])
+                # tester_operator.buy_at_date(fund_code=code, date=today, amount=30, if_value=True)
+        # if len(prob_to_sell)>0:
+        #     for code in prob_to_sell.index:
+        #         print("sell: ", code, "prob: ", prob_to_sell[code])
+        #         # tester_operator.sell_fund_all(fund_code=code,date=today)
+        return prob_to_buy
 
     def run(self):
         pass
@@ -205,17 +230,20 @@ class Verify(object):
             prob_to_sell = my_strategy.if_sell_accelerated_2(fund_list=tester.asset.my_fund.values, today_date=today, if_verify=True, all_data_fund=None)
             if len(prob_to_buy)>0:
                 for code in prob_to_buy.index:
-                    tester_operator.buy_at_date(fund_code=code,date=today, amount=50, if_value=True)
+                    print("buy: ", code)
+                    tester_operator.buy_at_date(fund_code=code,date=today, amount=30, if_value=True)
             if len(prob_to_sell)>0:
                 for code in prob_to_sell.index:
-                    tester_operator.sell_at_date(fund_code=code,date=today, amount=50, if_value=True)
+                    print("sell: ", code)
+                    tester_operator.sell_fund_all(fund_code=code,date=today)
             asset_after = tester_operator.get_asset_value(date=today,contains_cash=True,realtimeprice=False)
             print(today, "  asset_before:", asset_before, "  asset_after:",asset_after,"  cash:", tester.my_cash)
         asset_after = tester_operator.get_asset_value(duration[1],contains_cash=True,realtimeprice=False)
         gain = asset_after-asset_before
         gain_rate = (asset_after-asset_before)/asset_before
         yearly_gain_rate = gain_rate/((duration[1]-duration[0]).days/365)
-        print(50,50)
+        print(30,30)
+        tester_operator.save_operations()
         return [asset_before, asset_after,gain, gain_rate, yearly_gain_rate]
 
     def verify_comp_multithread(self, dutation = [datetime.datetime(2015,1,31), datetime.datetime(2020,1,28)]):
@@ -226,6 +254,7 @@ class Verify(object):
         
 
 verifier = Verify()
+runner = Runner()
 # result = verifier.verify_one_fund(fund_code="110031",duration=[datetime.datetime(2015,1,31), datetime.datetime(2020,1,28)])
 # print(result)
 #res1 = verifier.select_best_to_buy()
@@ -233,7 +262,12 @@ verifier = Verify()
 # print(res2)
 # verifier.verify_funds_multithread(duration=[datetime.datetime(2015,1,31), datetime.datetime(2020,1,28)])
 # verifier.verify_funds_multiprocesses(duration=[datetime.datetime(2015,1,31), datetime.datetime(2020,1,28)],principal=3000)
-res = verifier.verify_comp_accelerated(duration=[datetime.datetime(2015,1,1), datetime.datetime(2020,1,1)],principal=5000)
+
+t1 = datetime.datetime.now()
+res = runner.get_funds_to_buy()
+print("time spent: ")
+print(datetime.datetime.now()-t1)
+# res = verifier.verify_comp_accelerated(duration=[datetime.datetime(2015,1,4), datetime.datetime(2016,1,1)],principal=5000)
 print(res)
 # tester = User(username="hhhh", password="0000", my_cash=3000)
 # op = Operator(user=tester)

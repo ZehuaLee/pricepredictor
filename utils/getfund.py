@@ -73,8 +73,7 @@ class Data_Operator(object):
             else:
                 curpage+=1
         if parsed_data == None:
-            parsed_data = pd.DataFrame(total_list)
-            parsed_data.columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"]
+            parsed_data = pd.DataFrame(columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"])
         else:
             temp_data = pd.DataFrame(total_list)
             temp_data.columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"]
@@ -85,22 +84,23 @@ class Data_Operator(object):
         parsed_data["accumulate"] = parsed_data['accumulate'].fillna(parsed_data['accumulate'].mean())
         parsed_data["daily_rate"] = parsed_data[parsed_data["daily_rate"].str.contains("%")]['daily_rate'].str.strip("%").astype(float)/100
         parsed_data['daily_rate'] = parsed_data["daily_rate"].fillna(parsed_data['daily_rate'].mean())
+        parsed_data["date"] = parsed_data["date"].apply(lambda x: str(x))
         parsed_data["date"] = pd.to_datetime(parsed_data["date"])
         # for column in parsed_data.columns:
         #     parsed_data[column] = parsed_data[column].astype(str)
         return parsed_data
     
-    def read_multiple(self, fund_code, duration=[],entry_per_page = 20):
+    def read_multiple(self, fund_code, duration=[], entry_per_page = 20):
         print("process to fetch for %s" % fund_code)
         try:
-            fund = self.get_one_fund(fund_code,duration,entry_per_page)
+            fund = self.get_one_fund(fund_number = fund_code, duration=duration, entry_per_page=entry_per_page)
         except:
             fund = None
             print("Exception: Error found in "+ fund_code)
             return fund
         else:
             print(fund_code+" is fetched")
-            return fund
+        return fund
 
     def get_funds_multi_process(self, fund_list):
         p = Pool(config["ps_num"])
@@ -120,12 +120,14 @@ class Data_Operator(object):
                     fund_sum = pd.concat([fund_sum, y.get()], ignore_index=True, sort=False)
         return fund_sum
 
-    def get_funds_multi_thread(self, fund_list):
+    def get_funds_multi_thread(self, fund_list,duration=[],entry_per_page=20):
+        if not duration:
+            duration = [datetime.datetime.today(), datetime.datetime.today()]
         quedict = {}
         fund_sum = None
         with ThreadPoolExecutor(config["threads"]) as executor:
             for each in fund_list:
-                r1 = executor.submit(self.read_multiple, each)
+                r1 = executor.submit(self.read_multiple, each, duration, entry_per_page)
                 quedict[each] = r1
         for (x, y) in quedict.items():
             if fund_sum is None:
@@ -197,14 +199,32 @@ class Data_Operator(object):
 
     def get_realtime_price(self, fund_codes=[]):
         base_url = config["realtime_price_url"]
-        realtime_prices = []
-        for fund_code in fund_codes:
-            url = base_url.format(fund_code)
-            resp = requests.get(url)
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            price = float(soup.find(id='gz_gsz').contents[0])
-            realtime_prices.append(price)
-        return realtime_prices
+        quedict = {}
+        fund_sum = None
+        def read_one(fund_code):
+            try: 
+                url = base_url.format(fund_code)
+                resp = requests.get(url)
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                price = float(soup.find(id='gz_gsz').contents[0])
+            except:
+                return None
+            else:
+                return price
+        with ThreadPoolExecutor(config["threads"]) as executor:
+            for each in fund_codes:
+                r1 = executor.submit(read_one, each)
+                quedict[each] = r1
+        for (x, y) in quedict.items():
+            y_res = y.result()
+            print(x, y_res)
+            if fund_sum is None:
+                fund_sum = pd.DataFrame(columns=["fund_code","price"])
+            if y_res is not None:
+                df_temp = pd.DataFrame({"fund_code":[x], "price":[y_res]})
+                fund_sum = pd.concat([fund_sum, df_temp], ignore_index=True)
+        print(fund_sum)
+        return fund_sum
 
     def read_pickle(self, pickle_path):
         if not os.path.exists(pickle_path):
@@ -215,10 +235,30 @@ class Data_Operator(object):
         return new_data
 
 data_operator = Data_Operator()
+
+# fund_lists = data_operator.get_funds_list().ID.values
+# res = data_operator.get_realtime_price(fund_codes=fund_lists[:10])
+# print(res)
+
 # df = data_operator.load_fund("110013",[datetime.datetime(2019,12,10),datetime.datetime(2020,1,10)])
 # print(type(df.price.iloc[2]), type(df.price.iloc[2]),type(df.date.iloc[0]),type(df.accumulate.iloc[2]))
 # df = data_operator.get_funds(["110013","000075"])
 # print(type(df.price.iloc[0]))
+
+    # def get_realtime_price(self, fund_codes=[]):
+    #     base_url = config["realtime_price_url"]
+    #     realtime_prices = []
+    #     for fund_code in fund_codes:
+    #         url = base_url.format(fund_code)
+    #         resp = requests.get(url)
+    #         soup = BeautifulSoup(resp.text, 'html.parser')
+    #         price = float(soup.find(id='gz_gsz').contents[0])
+    #         realtime_prices.append(price)
+    #     return realtime_prices
+
+
+
+
 
 # class GetData(object):
 #     def __init__(self):

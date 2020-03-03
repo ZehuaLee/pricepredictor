@@ -116,6 +116,24 @@ class Operator(object):
         self.user.my_cash -= fund_value
         return True,"The latest data is found."
 
+    def sell_fund_all(self, fund_code, date=datetime.datetime.today()):
+        date = datetime.datetime(date.year, date.month, date.day)
+        fund_data = self.get_latest_fund(fund_code, date)
+        if fund_data.empty:
+            return False, "Error: No fund data of {} exists @{}".format(fund_code, str(date))
+        target_fund_asset = self.user.asset[self.user.asset.my_fund == fund_code]
+        if target_fund_asset.empty:
+            return False, "Error: No fund data of {} in assets".format(fund_code)
+        fund_units = target_fund_asset.my_asset.iloc[0]
+        new_record = {"userid":self.user.userid,"fund_code":fund_code,"date":date,"price":fund_data.price,"accumulate":fund_data.accumulate,"units":fund_units,"buy_sell":"sell"}
+        fund_value = fund_units*fund_data.price
+        self.user.my_cash+=fund_value
+        self.user.record.append(new_record,ignore_index=True)
+        idxs = self.user.asset[self.user.asset.my_fund == fund_code].index
+        self.user.asset.drop(index = idxs, inplace=True)
+        return True
+
+
     def sell_at_date(self, fund_code, date=datetime.datetime.today(),amount=0.0, if_value=True):
         date = datetime.datetime(date.year, date.month, date.day)
         fund_data = self.get_latest_fund(fund_code,date)
@@ -140,6 +158,9 @@ class Operator(object):
             # succeed, cost--, units--, my_cash++
             self.user.asset.my_cost.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] -= (self.user.asset.my_cost.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]]/self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]])*fund_units
             self.user.asset.my_units.iloc[self.user.asset.loc[self.user.asset.my_fund == fund_code].index[0]] -= fund_units
+            if self.user.asset[self.user.asset.my_fund==fund_code].iloc[0].my_units == 0:
+                idxs = self.user.asset.loc[self.user.asset.my_fund == fund_code].index
+                self.user.asset.drop(index=idxs, inplace=True)
         self.user.record.append(new_record,ignore_index=True)
         self.user.my_cash += fund_value
         return True

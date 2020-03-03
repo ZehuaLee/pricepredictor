@@ -10,7 +10,7 @@
     "timedelta":8,
     "startdate":"today",
     "ps_num":2,
-    "threads":2,
+    "threads":32,
     "if_value":true,
     "amount":100,
     "output_path":"C:/Users/leezehua/Projects/pricepredictor/data/fund_data/predict_result.csv",

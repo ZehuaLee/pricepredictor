@@ -136,23 +136,27 @@ class Strategy(object):
     def if_buy_accelerated(self, fund_list, today_date, if_verify=True, all_data_fund = None):
         dur = [today_date-datetime.timedelta(days=365*3), today_date]
         fds_all_3y = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="asc")
-        today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        if if_verify:
+            today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        else:
+            today_price = data_operator.get_realtime_price(fund_list).set_index("fund_code")
         if len(today_price) ==0:
             return []
         fds_all_2y = fds_all_3y[fds_all_3y.date > today_date-datetime.timedelta(days=365*2)]
         fds_all_1y = fds_all_2y[fds_all_2y.date > today_date-datetime.timedelta(days=365)]
         # res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/len(x[:len(x)*3//10]) if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
-        res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/365 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
-        res_2y = fds_all_2y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/243 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.666
-        res_1y = fds_all_1y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/121 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.333
-        result_list = res_3y[res_3y>0.7]
+        res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/240 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
+        res_2y = fds_all_2y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/160 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.666
+        res_1y = fds_all_1y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]<x.price])/80 if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)*0.333
+        result_list = res_3y[res_3y>0.8]
         result_list = result_list.append(res_2y[(res_2y>0.6) & (~(res_2y.index.isin(result_list.index)))])
         result_list = result_list.append(res_1y[(res_1y>0.3) & (~(res_1y.index.isin(result_list.index)))])
         assets = self.user.asset
         records = self.user.record
-        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=5))) & (records.fund_code.isin(fund_list)) & (records.buy_sell == "buy")].set_index("fund_code")
-        fund_not_buy = (rec_in_days[["price"]]-today_price[["price"]]).fillna(0).apply(lambda x: x[x<0])
-        fund_not_buy = fund_not_buy[~fund_not_buy.index.duplicated()].index
+        rec_in_days = records[(records.date>(today_date-datetime.timedelta(days=20))) & (records.fund_code.isin(fund_list)) & (records.buy_sell == "buy")].set_index("fund_code")
+        # fund_not_buy = (rec_in_days[["price"]]-today_price[["price"]]).fillna(0).apply(lambda x: x[x<0])
+        # fund_not_buy = fund_not_buy[~fund_not_buy.index.duplicated()].index
+        fund_not_buy = rec_in_days.index.values
         avg_cost = assets[["my_fund","my_units","my_cost"]].rename(columns={"my_fund":"fund_code"}).set_index("fund_code")
         avg_cost["avg_cost"] = avg_cost["my_cost"]/avg_cost["my_units"]
         avg_cost_prob = ((avg_cost["avg_cost"]-today_price["price"])/avg_cost["avg_cost"]).fillna(0)
@@ -173,7 +177,10 @@ class Strategy(object):
         if assets.empty:
             return []
         fds_all_3y = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="desc")
-        today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        if if_verify:
+            today_price = fds_all_3y[fds_all_3y.date == today_date].set_index("fund_code")
+        else:
+            today_price = data_operator.get_realtime_price(fund_list)
         if len(today_price) ==0:
             return []
         res_3y = fds_all_3y.groupby(by="fund_code").apply(lambda x: len(x[:len(x)*3//10][x[x.date==today_date].price.iloc[0]>x.price])/len(x[:len(x)*3//10]) if len(x[:len(x)*3//10])>0 and len(x[x.date==today_date])>0 else 0)
@@ -184,7 +191,7 @@ class Strategy(object):
         avg_cost = assets[["my_fund","my_units","my_cost"]].rename(columns={"my_fund":"fund_code"}).set_index("fund_code")
         avg_cost["avg_cost"] = avg_cost["my_cost"]/avg_cost["my_units"]
         avg_cost_prob = ((today_price["price"]-avg_cost["avg_cost"])/avg_cost["avg_cost"]).fillna(0)
-        avg_cost_prob = avg_cost_prob[avg_cost_prob>0.1].to_frame(name="prob")
+        avg_cost_prob = avg_cost_prob[avg_cost_prob>0.05].to_frame(name="prob")
         result_list = result_list.to_frame(name="prob")
         result_list = result_list[(~result_list.index.isin(fund_not_buy)) & (result_list.index.isin(avg_cost_prob.index))]
         for x in avg_cost_prob.index:
@@ -192,11 +199,13 @@ class Strategy(object):
                 result_list.prob.loc[x] += avg_cost_prob.prob.loc[x]
         return result_list[result_list.prob>0.7].fillna(0).sort_values("prob", ascending=False)[:10]
         
-
     def if_sell_accelerated_2(self, fund_list, today_date, if_verify=True, all_data_fund = None):
         dur = [today_date, today_date]
         assets = self.user.asset
-        today_price = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="desc")
+        if if_verify:
+            today_price = data_operator.load_funds(fund_codes=fund_list, duration=dur, orderby="price", asc="desc")
+        else:
+            today_price = data_operator.get_realtime_price(fund_list)
         if today_price.empty:
             return []
         if assets.empty:
@@ -348,9 +357,10 @@ class Strategy(object):
 
 
 # Test Case
-tester = Strategy(user=User(username="zehua",password = "0000", my_cash = 10000))
+# tester = Strategy(user=User(username="zehua",password = "0000", my_cash = 10000))
 # print(datetime.datetime.now())
-res = tester.if_buy(fund_code="001986",today_date=datetime.datetime(2019,1,2))
+# res = tester.if_buy_accelerated(fund_list=data_operator.get_funds_list().ID.values,today_date=datetime.datetime(2020,3,1),if_verify=True)
+# print(res)
 # print(datetime.datetime.now(),"if buy:",res)
 # operator = Operator(user=User(username="zehua",password = "0000", my_cash = 10000))
 # operator.buy_at_date(fund_code="001986",date=datetime.datetime(2019,1,3),amount=100)
