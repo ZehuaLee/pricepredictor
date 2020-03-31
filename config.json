@@ -1,9 +1,9 @@
 {   
     "db_file_path":"data/db/MyFund.db",
     "db_engine": "sqlite:///{}",
-    "base_folder":"C:/Users/leezehua/Projects/pricepredictor",
-    "funds_folder":"C:/Users/leezehua/Projects/pricepredictor/data/",
-    "fundlist_path":"C:/Users/leezehua/Projects/pricepredictor/data/fund_data/all_fund.csv",
+    "base_folder":"pricepredictor",
+    "funds_folder":"pricepredictor/data/",
+    "fundlist_path":"pricepredictor/data/fund_data/all_fund.csv",
     "strategy_file":"fixed",
     "verify_interval":8,
     "strategy_params":[],
@@ -13,7 +13,7 @@
     "threads":32,
     "if_value":true,
     "amount":100,
-    "output_path":"C:/Users/leezehua/Projects/pricepredictor/data/fund_data/predict_result.csv",
+    "output_path":"pricepredictor/data/fund_data/predict_result.csv",
     "single_fund_url":"http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={fund_code}&page={page_num}&sdate={start_date}&edate={end_date}&per={entries_per_page}",
     "all_funds_url":"http://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=1&lx=1&letter=&gsid=&text=&sort=zdf,desc&page=30,200&dt=1567696684255&atfc=&onlySale=0",
     "realtime_price_url":"http://fund.eastmoney.com/{}.html"
