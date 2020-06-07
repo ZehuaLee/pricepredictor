@@ -1,0 +1,7 @@
+python3.6.9
+SQLAlchemy
+virtualenv
+BeautifulSoup4
+pandas
+numpy
+cupy
