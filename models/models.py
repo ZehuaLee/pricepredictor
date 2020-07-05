@@ -12,8 +12,11 @@ from utils import readconfig
 
 Base = declarative_base()
 TABLE_LIST = ['Fund', 'Record', 'User', 'Asset']
-ENGINE_PATH = readconfig.config["db_engine"]+"?check_same_thread=False"
-
+if readconfig.config["db_engine"][:6]=="sqlite":
+    ENGINE_PATH = readconfig.config["db_engine"]+"?check_same_thread=False"
+else:
+    ENGINE_PATH = readconfig.config["db_engine"]
+    
 class Fund(Base):
     __tablename__ = 'Fund'
     fund_code = Column(VARCHAR(), primary_key=True)
