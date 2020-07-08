@@ -16,7 +16,7 @@ from models.models import db_operator
 from concurrent.futures import ThreadPoolExecutor
 # funds = ["110013", "000011","040001","020022"]
 # count = 0
-fds_list = data_operator.get_funds_list()
+fds_list = data_operator.get_funds_list("data/fund_data/all_fund.csv")
 res = data_operator.get_realtime_price(fund_codes=fds_list.ID.values)
 print(res)
 # fund_in_db = db_operator.sql_query(sql = "SELECT distinct fund_code from Fund").fund_code.values

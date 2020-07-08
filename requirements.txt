@@ -5,3 +5,4 @@ BeautifulSoup4
 pandas
 numpy
 cupy
+requests

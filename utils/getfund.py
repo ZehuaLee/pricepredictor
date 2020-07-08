@@ -30,7 +30,7 @@ class Data_Operator(object):
         # self.fund_folder = os.path.abspath(os.path.join(os.path.abspath(__file__),os.pardir, os.pardir,"data/fund_data"))
 
     def get_one_fund(self, fund_number, duration = [], entry_per_page = 20):
-        parsed_data = None
+        parsed_data = pd.DataFrame(columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"])
         if len(duration) == 0:
             duration = self.duration
         def parse_request(text):
@@ -72,9 +72,9 @@ class Data_Operator(object):
                 break
             else:
                 curpage+=1
-        if parsed_data == None:
+        if len(total_list) == 0:
             parsed_data = pd.DataFrame(columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"])
-        else:
+        else:   
             temp_data = pd.DataFrame(total_list)
             temp_data.columns = ["fund_code","date","price","accumulate","daily_rate","purchase_state","ransom_state","dividends"]
             parsed_data = pd.concat([parsed_data,temp_data], ignore_index = True)
@@ -123,12 +123,63 @@ class Data_Operator(object):
     def get_funds_multi_thread(self, fund_list,duration=[],entry_per_page=20):
         if not duration:
             duration = [datetime.datetime.today(), datetime.datetime.today()]
+        if type(duration[0])==type('str') or type(duration[1])==type('str'):
+            try:
+                dur0 = datetime.datetime.strptime(str(duration[0]),"%Y-%m-%d")
+                dur1 = datetime.datetime.strptime(str(duration[1]), "%Y-%m-%d")
+                duration = [dur0, dur1]
+            except:
+                print("Bad duration: ", duration)
+                raise Exception("Bad duration: "+ str(duration))
+        if type(duration[0]) != type(datetime.datetime(2018,12,10)) or type(duration[1]) != type(datetime.datetime(2018,12,10)):
+            raise Exception("Bad duration: "+ str(duration))
         quedict = {}
         fund_sum = None
         with ThreadPoolExecutor(config["threads"]) as executor:
             for each in fund_list:
                 r1 = executor.submit(self.read_multiple, each, duration, entry_per_page)
                 quedict[each] = r1
+        for (x, y) in quedict.items():
+            if fund_sum is None:
+                fund_sum = y.result()
+            else:
+                if y.result() is not None:
+                    print(x, " is being merged to result.")
+                    # db_operator.fund_update(y.result())
+                    fund_sum = pd.concat([fund_sum, y.result()], ignore_index=True, sort = False)
+        return fund_sum
+
+    # How to nest the multi-thread inside the multi-processing.
+    def get_funds_multi_thread_v2(self, fund_list,duration=[],entry_per_page=20):
+        if not duration:
+            duration = [datetime.datetime.today(), datetime.datetime.today()]
+        if type(duration[0])==type('str') or type(duration[1])==type('str'):
+            try:
+                dur0 = datetime.datetime.strptime(str(duration[0]),"%Y-%m-%d")
+                dur1 = datetime.datetime.strptime(str(duration[1]), "%Y-%m-%d")
+                duration = [dur0, dur1]
+            except:
+                print("Bad duration: ", duration)
+                raise Exception("Bad duration: "+ str(duration))
+        if type(duration[0]) != type(datetime.datetime(2018,12,10)) or type(duration[1]) != type(datetime.datetime(2018,12,10)):
+            raise Exception("Bad duration: "+ str(duration))
+        quedict = {}
+        fund_sum = None
+        with ThreadPoolExecutor(config["threads"]) as executor:
+            for each in fund_list:
+                r1 = executor.submit(self.read_multiple, each, duration, entry_per_page)
+                quedict[each] = r1
+        # def single_merge(fd_list, dt_dict):
+        #     sub_sum = None
+        #     for x in fd_list:
+        #         if sub_sum == None:
+        #             sub_sum = dt_dict[x]
+        #         else:
+        #             if dt_dict[x].result() is not None:
+        #                 print(x, " is being merged to result.")
+        #                 sub_sum = pd.concat([sub_sum, dt_dict[x].result()])
+
+
         for (x, y) in quedict.items():
             if fund_sum is None:
                 fund_sum = y.result()

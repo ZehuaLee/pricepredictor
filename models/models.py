@@ -70,7 +70,9 @@ class Asset(Base):
 
 
 class DB_operation(object):
+    print("------------------",os.path.abspath(readconfig.config["db_file_path"]))
     def __init__(self, db_path = ENGINE_PATH.format(readconfig.config["db_file_path"])):
+        print("-------------",db_path)
         self.db_path=db_path
         self.dtypedict={
             'str':VARCHAR,
