@@ -1,6 +1,5 @@
 *.pkl
 *.db
 *.pyc
-*.ipynb*/*
 *.vscode/*
 *._.DS_Store
