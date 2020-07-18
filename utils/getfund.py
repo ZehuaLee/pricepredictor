@@ -149,7 +149,7 @@ class Data_Operator(object):
                     fund_sum = pd.concat([fund_sum, y.result()], ignore_index=True, sort = False)
         return fund_sum
 
-    # How to nest the multi-thread inside the multi-processing.
+    # How to nest the multi-thread inside the multi-processing, under construction...
     def get_funds_multi_thread_v2(self, fund_list,duration=[],entry_per_page=20):
         if not duration:
             duration = [datetime.datetime.today(), datetime.datetime.today()]
